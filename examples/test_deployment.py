@@ -17,14 +17,14 @@ def test_deployment(kube):
 
     kube.create(d)
 
-    d.wait_until_ready(timeout=20)
+    d.wait_until_ready()
     d.refresh()
 
     pods = d.get_pods()
     assert len(pods) == 1
 
     p = pods[0]
-    p.wait_until_ready(timeout=10)
+    p.wait_until_ready()
 
     # Issue an HTTP GET against the Pod. The deployment
     # is an http echo server, so we should get back data
@@ -43,6 +43,8 @@ def test_deployment(kube):
     #   This may be an issue with the image reflecting the request back.
     assert get_data['query'] == {'abc': '123'}
 
+    p.wait_until_ready()
+
     # Issue an HTTP POST against the Pod. The deployment
     # is an http echo server, so we should get back data
     # about the request.
@@ -54,12 +56,33 @@ def test_deployment(kube):
     post_data = r.json()
     assert post_data['path'] == '/test/post'
     assert post_data['method'] == 'POST'
-    assert post_data['body'] == '"foobar"'
+    assert post_data['body'] == 'foobar'
     # fixme (etd): I would expect this to be {'abc': 123}, matching
     #   the input data types (e.g. value not a string). Need to determine
     #   where this issue lies..
     #   This may be an issue with the image reflecting the request back.
     assert post_data['query'] == {'abc': '123'}
+
+    # Issue an HTTP POST against the Pod. The deployment
+    # is an http echo server, so we should get back data
+    # about the request. The request is a json payload and
+    # should come back as json
+    import json
+
+    r = p.http_proxy_post(
+        '/test/post',
+        query_params={'abc': 123},
+        data=json.dumps(
+            {'abc': 123}
+        )
+    )
+    post_data = r.json()
+    assert post_data['path'] == '/test/post'
+    assert post_data['method'] == 'POST'
+    assert post_data['body'] == \
+        json.dumps(
+            {'abc': 123}
+        )
 
     containers = p.get_containers()
     c = containers[0]
@@ -67,3 +90,5 @@ def test_deployment(kube):
 
     kube.delete(d)
     d.wait_until_deleted(timeout=20)
+
+    
